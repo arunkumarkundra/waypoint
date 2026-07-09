@@ -74,8 +74,11 @@ button:focus-visible,a:focus-visible,select:focus-visible,input:focus-visible{ou
 .intake{padding:60px 0 80px}
 .intake-card{background:var(--card);border:1px solid var(--mist);border-radius:20px;max-width:640px;margin:0 auto;padding:36px 34px 30px;box-shadow:0 14px 40px rgba(11,37,48,.07)}
 .steps-dots{display:flex;gap:7px;margin-bottom:26px}
-.steps-dots i{width:26px;height:4px;border-radius:2px;background:var(--mist);transition:background .3s}
-.steps-dots i.on{background:var(--lagoon)}
+.steps-dots button{width:30px;height:9px;border-radius:5px;background:var(--mist);transition:all .2s;padding:0}
+.steps-dots button.done{background:var(--lagoon);cursor:pointer}
+.steps-dots button.cur{outline:2px solid var(--ink);outline-offset:2px}
+.steps-dots button:disabled{cursor:default;opacity:.75}
+.steps-dots button.done:hover{transform:scaleY(1.5)}
 .q-title{font-family:var(--disp);font-weight:600;font-size:clamp(21px,3vw,26px);letter-spacing:-.01em;margin:6px 0 6px}
 .q-why{font-size:13.5px;color:var(--ink-soft);margin-bottom:22px}
 .q-why .tag{margin-left:6px}
@@ -223,12 +226,13 @@ input.txt{width:100%;font:inherit;font-size:16px;padding:13px 14px;border:1.5px 
   <div class="wrap hero-inner">
     <span class="eyebrow">Waypoint · Vacation Intelligence · free time-aware engine</span>
     <h1>Don't search for a trip. <em>Decide</em> one.</h1>
-    <p class="lede">Tell Waypoint where you're starting from — any town on Earth. It <b>discovers</b> nearby candidates live from Wikidata, blends in a world atlas, checks <b>real weather</b> for your month, your <b>holiday calendar</b>, and prices the whole trip — all on free, open data. No account, no API keys, no server.</p>
+    <p class="lede">Tell Waypoint where you're starting from — any town on Earth. It <b>discovers</b> candidates, weighs the <b>time you actually have</b> against the time each place deserves, checks <b>real weather</b> for your month, your <b>holiday calendar</b>, and prices the whole trip — then ranks everything around your budget, pace and comfort. Completely free. No login. Nothing you enter is stored on any server — your trip stays on your device.</p>
     <button class="btn btn-primary" onclick="startIntake()">Start deciding →</button>
     <div class="hero-principles">
-      <div><b>Long list → deep dive</b><span>Candidates are generated for <i>your</i> origin, then researched. One hard rule: if travel time would eat your trip, we hide it — and say how many extra days unlock it.</span></div>
-      <div><b>Live, labeled data</b><span>Places from Wikidata, weather from actuals, holidays from official calendars — every claim tagged with its source.</span></div>
-      <div><b>Budget, end to end</b><span>Transport, visa, stay, food, local travel, experiences — as honest ranges, never fake precision.</span></div>
+      <div><b>Time is the real constraint</b><span>We weigh the days you have against the days a place deserves, and the journey each way. If travel would eat your trip, we say so — and how many extra days unlock it.</span></div>
+      <div><b>Ranked around you</b><span>Season, your interests, price sensitivity, pace, comfort, adventure appetite, crowds and family fit — every candidate scored on all of it, and shown the maths.</span></div>
+      <div><b>How you'd get there, and what it costs</b><span>Drive, train or fly — with the overnight-train trick that saves a hotel night — and an end-to-end budget in your own currency.</span></div>
+      <div><b>Private and free</b><span>No login, no tracking, nothing stored on a server. Everything runs in your browser.</span></div>
     </div>
   </div>
 </header>
@@ -249,7 +253,7 @@ input.txt{width:100%;font:inherit;font-size:16px;padding:13px 14px;border:1.5px 
     <div class="results-head">
       <h2>Where you should go</h2>
       <span class="conf-pill" id="confPill"></span>
-      <button class="conf-pill" onclick="shareLink()" style="cursor:pointer" title="Copies a link that reproduces this exact board">🔗 Share this board</button>
+      <button class="conf-pill" onclick="shareLink()" style="cursor:pointer" title="Copy a share link to this search">🔗 Share this search</button>
     </div>
     <div class="results-grid">
       <div>
@@ -265,7 +269,7 @@ input.txt{width:100%;font:inherit;font-size:16px;padding:13px 14px;border:1.5px 
   </div>
 </section>
 
-<footer><div class="wrap" id="footNote">Waypoint v2 · Geocoding © OpenStreetMap contributors · Weather: Open-Meteo · Holidays: Nager.Date · Places: Wikidata · Guides & photos: Wikipedia/Wikivoyage (CC BY-SA) · FX: open.er-api.com · Optional AI: Claude (proxy) or Qwen on-device via Transformers.js. All figures are decision estimates.</div></footer>
+<footer><div class="wrap" id="footNote">Waypoint · Geocoding © OpenStreetMap contributors · Guides &amp; photos: Wikipedia / Wikivoyage (CC BY-SA) · All figures are decision estimates.</div></footer>
 
 <script>
 /* =====================================================================
@@ -308,7 +312,7 @@ function extractJSON(text){ // tolerant: strips fences/preamble, grabs first [..
 /* ---------- state ---------- */
 const S={step:0,
   a:{origin:null,               // {name, cc, ll:[lat,lon], country}
-     month:null,days:null,party:null,interests:[],
+     month:"flex",days:10,party:"family",interests:[],
      sliders:{pace:55,comfort:55,price:60,adventure:45}},
   skipped:new Set(),
   cands:[],                     // pipeline candidates
@@ -635,7 +639,7 @@ const STEPS=[
  {key:"sliders",title:"Last one — did we guess you right?",sliders:true,
   why:"Pre-estimated from your answers. Drag anything that feels off."}
 ];
-function startIntake(){$("results").classList.add("hidden");$("pipeline").classList.add("hidden");renderMagic();
+function startIntake(){$("results").classList.add("hidden");$("pipeline").classList.add("hidden");renderMagic();S.maxStep=0;
   $("intake").classList.remove("hidden");S.step=0;renderStep();
   $("intake").scrollIntoView({behavior:"smooth"})}
 function estimateSliders(){const s={pace:55,comfort:55,price:60,adventure:45},a=S.a;
@@ -649,7 +653,10 @@ function estimateSliders(){const s={pace:55,comfort:55,price:60,adventure:45},a=
 function renderStep(){
   const st=STEPS[S.step],card=$("intakeCard");
   if(st.sliders)estimateSliders();
-  const dots=STEPS.map((_,i)=>`<i class="${i<=S.step?'on':''}"></i>`).join("");
+  S.maxStep=Math.max(S.maxStep||0,S.step);
+  const dots=STEPS.map((s,i)=>{
+    const done=i!==S.step&&i<=S.maxStep;
+    return `<button class="${(i===S.step?"cur ":"")+(done?"done":"")}" ${i<=S.maxStep&&i!==S.step?`onclick="gotoStep(${i})"`:"disabled"} title="${s.title}${done?" — tap to change":""}" aria-label="Step ${i+1}: ${s.title}"></button>`}).join("");
   let body="";
   if(st.custom){ // origin
     const o=S.a.origin;
@@ -678,10 +685,10 @@ function renderStep(){
   }
   card.innerHTML=`<div class="steps-dots">${dots}</div>
     <span class="eyebrow">Question ${S.step+1} of ${STEPS.length}</span>
-    <h3 class="q-title">${st.title}</h3><p class="q-why">Why we ask: ${st.why}</p>${body}
+    <h3 class="q-title">${st.title}</h3><p class="q-why">${st.why}</p>${body}
     <div class="intake-nav">
-      ${st.noskip?`<span class="skip-note">This one we genuinely need</span>`:`<button class="btn-ghost" onclick="skipStep()">Skip — estimate for me</button>`}
-      ${(st.multi||st.sliders)?`<button class="btn btn-primary" onclick="nextStep()">${S.step===STEPS.length-1?"Run the pipeline →":"Next →"}</button>`
+      <span>${S.step>0?`<button class="btn-ghost" onclick="gotoStep(${S.step-1})">← Back</button>`:""}</span>
+      ${(st.multi||st.sliders)?`<button class="btn btn-primary" onclick="nextStep()">${S.step===STEPS.length-1?"✨ Run the magic →":"Next →"}</button>`
         :st.custom?"":`<span class="skip-note">Tap an answer to continue</span>`}
     </div>`;
   if(st.custom)setTimeout(()=>{const i=$("orgIn");i&&i.focus()},50);
@@ -705,18 +712,16 @@ function geoOrigin(){
     catch(e){$("orgNote").innerHTML="Couldn't resolve your position — type a place instead."}
   },()=>{$("orgNote").innerHTML="Couldn't detect your location — type a place instead."},{timeout:8000});
 }
+function gotoStep(i){if(i<=(S.maxStep||0)&&i!==S.step){S.step=i;renderStep()}}
+function nextStep(){if(S.step<STEPS.length-1){S.step++;renderStep()}else runPipeline()}
 function pick(key,val,multi){S.skipped.delete(key);
   if(multi){const i=S.a.interests.indexOf(val);i>=0?S.a.interests.splice(i,1):S.a.interests.push(val);renderStep();return}
   S.a[key]=(key==="month"&&val!=="flex")||key==="days"?+val:val;nextStep()}
-function skipStep(){const st=STEPS[S.step];S.skipped.add(st.key);
-  const d={month:"flex",days:6,party:"couple"};if(st.key in d&&S.a[st.key]==null)S.a[st.key]=d[st.key];nextStep()}
-function nextStep(){if(S.step<STEPS.length-1){S.step++;renderStep()}else runPipeline()}
-
-/* ---------- scoring ---------- */
 const IKEY={beach:"be",nature:"na",culture:"cu",food:"fo",adventure:"ad",nightlife:"ni",family:"fa",calm:"ca"};
 function scoreCand(c){
   const a=S.a,sl=a.sliders;
-  let m=a.month==="flex"?bestGuessMonth(c):a.month;
+  const m=a.month==="flex"?bestGuessMonth(c):a.month;
+  const sel=chosenMode(c),tol=travelBudgetH(c);
   const parts=[];const P=(label,pts,max)=>parts.push({label,pts:Math.round(pts*10)/10,max});
   const cl=S.climate[ckey(c)+"|"+m],sf=seasonFitFromClimate(cl);
   if(sf!=null)P("Season fit · real weather",sf/10*24,24);
@@ -728,14 +733,12 @@ function scoreCand(c){
   P("Vibe fit",Math.min(12,vibe),12);
   const costFit=1-Math.abs((c["$"]-1)/4-(1-sl.price/100))*(0.55+sl.price/150);
   P("Value for you",Math.max(0,costFit)*14,14);
-  const days=a.days||6,sel=chosenMode(c),tol=travelBudgetH(c);
-  c.mo=sel.mo;c.h=sel.h;                       // board display follows the chosen mode
-  const feasible=sel.effH<=tol*1.1+.01;
-  const eff=Math.max(0,16-16*0.8*(sel.effH/Math.max(tol,2)));
-  P("Travel effort · "+sel.label.toLowerCase(),eff,16);
-  if(sel.nightsSaved)P("Hotel nights saved en route",sel.nightsSaved*1.2,0);
-  let dd=Math.abs(S.a.origin.ll[1]-c.lo);if(dd>180)dd=360-dd;const tz=Math.round(dd/15);
-  if(sel.mo==="fly"&&days<=5&&tz>=6)P("Jet lag vs short trip",-Math.min(6,(tz-4)*0.9),0);
+  const eff=sel.effH<=tol?16-5*(sel.effH/Math.max(tol,0.5)):Math.max(0,11-(sel.effH-tol)*1.7);
+  P("Travel effort · "+sel.mo,eff,16);
+  if(sel.nightsSaved)P("Overnight travel — hotel nights saved",2,0);
+  const days=a.days||6;
+  let dd=Math.abs(a.origin.ll[1]-c.lo);if(dd>180)dd=360-dd;const tz=Math.round(dd/15);
+  if(days<=5&&tz>=6)P("Jet lag vs short trip",-Math.min(6,(tz-4)*0.9),0);
   if(a.party==="family"||a.party==="multigen")P("Family fit",c.t.fa/9*8,8);
   else P("Ease for your style",((c.t.ca+9-Math.abs(c.t.ni-sl.pace/12))/18)*(0.5+sl.comfort/200)*8,8);
   if(c.pk&&c.pk.includes(m+1))P("Peak-season crowds",-(2.5+(100-sl.pace)/40),0);
@@ -745,7 +748,7 @@ function scoreCand(c){
   if(fb==="no")P("You said 'not for me'",-30,0);
   if(fb==="love")P("You loved this",6,0);
   const total=Math.max(0,Math.round(parts.reduce((s,p)=>s+p.pts,0)));
-  return{c,total,parts,m,cl,sel,feasible,tol};
+  return{c,total,parts,m,cl,sel,tol,feasible:sel.effH<=tol*1.1+.01};
 }
 function rankAll(){ // hard-filter what time makes impossible (review: critical-criteria exception)
   const all=S.cands.map(scoreCand).sort((a,b)=>b.total-a.total);
@@ -802,13 +805,12 @@ function showResults(){$("pipeline").classList.add("hidden");$("results").classL
 function refresh(first){
   const ranked=rankAll();
   if(!S.sel||!ranked.some(r=>ckey(r.c)===S.sel))S.sel=ckey(ranked[0].c);
-  renderBoard(ranked,first);renderDetail(ranked);renderDock();maybeAIVerdict(ranked.find(x=>ckey(x.c)===S.sel));
+  renderBoard(ranked,first);renderDetail(ranked);renderDock();
   const foot=$("boardFoot");
   if(S.hidden>0){const un=Math.max(0,feasibleCount((S.a.days||6)+2)-(ranked.length));
     foot.innerHTML=`${S.hidden} PLACES HIDDEN — TRAVEL TIME WOULD EAT YOUR ${S.a.days||6} DAYS`+(un>0?` · <b style="color:var(--board-amber)">+2 DAYS UNLOCKS ${un} MORE</b>`:"");}
   else foot.textContent="SCORES RE-COMPUTE INSTANTLY WHEN ASSUMPTIONS CHANGE";
-  const skips=S.skipped.size;
-  $("confPill").innerHTML=`CONFIDENCE <b>${confidence()}%</b> · ${S.wdOK?"live discovery":"atlas only"} · ${skips?`${skips} assumed`:"all answered"}`;
+  $("confPill").innerHTML=`CONFIDENCE <b>${confidence()}%</b> · ${S.wdOK?"live discovery":"atlas only"}`;
   S.prevRank=ranked.map(r=>ckey(r.c));
 }
 const MICON={fly:"✈",train:"🚆",drive:"🚗",cab:"🚕",traincar:"🚆"};
@@ -847,7 +849,7 @@ function renderDock(){
     <label class="toggle"><input type="checkbox" ${a.party==="family"||a.party==="multigen"?"checked":""}
       onchange="S.a.party=this.checked?'family':'couple';S.skipped.delete('party');refresh()"> Traveling with kids / grandparents</label>
     <div class="row" style="margin-top:14px;border-top:1px solid var(--mist);padding-top:14px">
-      <button class="dock-geo" onclick="shareLink()">🔗 Copy a share link to this exact board</button>
+      <button class="dock-geo" onclick="shareLink()">🔗 Copy a share link to this search</button>
       <label style="margin-top:10px">Origin · ${esc(a.origin.name)}</label>
       <button class="btn-ghost" style="padding:4px 0" onclick="startIntake()">↺ New origin or interests — re-run the pipeline</button></div>`;
 }
@@ -874,6 +876,12 @@ function budgetHTML(c){
       <div class="bg-total"><b>${fmtMoney(tLo,b.cur)} – ${fmtMoney(tHi,b.cur)}</b>${usd}</div>
     </div><p class="est-note">Computed from distance, cost tier and your comfort/pace sliders — it re-prices live as you drag them.</p></div>`;
 }
+async function distillVoy(text){
+  if(SLM.status!=="ready"||!text)return null;
+  try{let t=(await slmChat("You compress travel-guide text. Use ONLY the given text — no new facts, no numbers that are not in it. One sentence, max 20 words, plain text.",text.slice(0,700),50)).replace(/\s+/g," ").trim();
+    return(t.length>15&&t.length<160)?t:null;
+  }catch(e){return null}
+}
 async function runEnrich(k,silent){
   const c=S.cands.find(x=>ckey(x)===k);if(!c)return;
   if(!silent){const b=$("enRun");if(b){b.disabled=true;b.textContent="Fetching photo, guide intro, local holidays…"}}
@@ -885,6 +893,7 @@ async function runEnrich(k,silent){
     en.destHols=hs.filter(x=>{const k=x.date+"|"+x.name;if(seen.has(k))return false;seen.add(k);
       const d=new Date(x.date+"T00:00:00");return d.getMonth()===m&&d>=new Date()}).slice(0,3)}));
   await Promise.all(jobs.map(p=>p.catch(()=>{})));
+  if(en.voy){const g=await distillVoy(en.voy);if(g)en.gist=g}
   en._month=S.a.month;S.enrich[k]=en;
   if(!silent)refresh();
 }
@@ -899,7 +908,7 @@ function enrichHTML(c){
       <img src="${en.img}" alt="${esc(c.n)}" style="width:100%;display:block;max-height:280px;object-fit:cover">
       <div style="font-size:11px;color:var(--ink-soft);padding:6px 10px">Photo via <a href="${en.wp||"#"}" target="_blank" rel="noopener">Wikipedia</a> ${F()}</div></div>`:""}
     ${en.voy?`<div class="why"><h4>From the open travel guide ${F()}</h4>
-      <ul><li>${esc(en.voy)} <a href="${en.voyUrl}" target="_blank" rel="noopener">Wikivoyage</a> · CC BY-SA</li></ul></div>`:""}
+      <ul>${en.gist?`<li><b>In short:</b> ${esc(en.gist)} <span class="tag ai">ON-DEVICE AI</span></li>`:""}<li>${esc(en.voy)} <a href="${en.voyUrl}" target="_blank" rel="noopener">Wikivoyage</a> · CC BY-SA</li></ul></div>`:""}
     ${(fest.length||en.destHols&&en.destHols.length)?`<div class="why"><h4>While you're there</h4><ul>
       ${fest.map(f=>`<li><b>${esc(f[1])}</b> — happening in ${MONTHS[m]}. ${F()}</li>`).join("")}
       ${(en.destHols||[]).map(x=>`<li>Local public holiday: <b>${esc(x.localName||x.name)}</b> (${x.date}) — expect closures & local crowds. ${F()}</li>`).join("")}
@@ -943,17 +952,17 @@ function travelHTML(r){
     <p class="est-note">Uses your ${sel.effH<=r.tol?"":"(exceeded) "}travel-time budget: ${fmtH(sel.effH)} of ~${fmtH(r.tol)} (${pct}%). Distance-band rules apply in-land only; sea/overseas defaults to air. Tap a mode — score and budget follow it.</p></div>`;
 }
 function linksHTML(c){
-  return `<div class="why"><h4>Make it real</h4>
+  return `<hr style="border:0;border-top:1px solid var(--mist);margin:26px 0 22px">
+    <div class="why"><h4>Make it real</h4>
     <div style="display:flex;flex-wrap:wrap;gap:10px">${outLinks(c).map(([t,u])=>
       `<a class="chip" style="text-decoration:none" href="${u}" target="_blank" rel="noopener">${t}</a>`).join("")}</div>
-    <p class="est-note">Plain outbound links today (may become affiliate links later). They never influence the ranking.</p></div>`;
+    </div>`;
 }
 function renderDetail(ranked){
   const r=ranked.find(x=>ckey(x.c)===S.sel),c=r.c,i=ranked.indexOf(r),x=explain(r,ranked);
   const fb=S.feedback[ckey(c)];
-  const verdict=r.total>=75?"estimated to be an excellent choice":r.total>=60?"estimated to be a strong choice":r.total>=45?"a workable choice, with trade-offs":"probably not the right fit under current assumptions";
+  const verdict=r.total>=75?"estimated to be an excellent choice":r.total>=60?"estimated to be a strong choice":r.total>=45?"a workable choice, with trade-offs":"probably not the right fit for these preferences";
   const li=(arr,warn)=>arr.map(t=>`<li class="${warn?"warn":""}">${t}</li>`).join("")||"<li>Nothing notable.</li>";
-  const assumptions=[...S.skipped].map(k=>({month:"When — assumed flexible",days:"Trip length — assumed ~6 days",party:"Who's traveling — assumed a couple",interests:"Interests — balanced mix",sliders:"Vibe sliders — our estimates"})[k]).filter(Boolean);
   $("detail").innerHTML=`
     <div class="detail-hero"><div class="d-top">
         <div><h2>${esc(c.n)}</h2><div class="cty">${esc(c.co)} · ${"$".repeat(c["$"])} · plan ${c.d}+ days${c.src==="wd"?' · <span class="badge-live">LIVE · WIKIDATA</span>':''} · ${MICON[c.mo]} ~${fmtH(c.h)} from ${esc(S.a.origin.name)}</div></div>
@@ -981,7 +990,7 @@ function renderDetail(ranked){
         <button class="${fb==="been"?"on":""}" onclick="giveFb('${esc(ckey(c))}','been')">✓ Been there</button>
         <button class="${fb==="no"?"on":""}" onclick="giveFb('${esc(ckey(c))}','no')">✕ Not for me</button></div>
       ${linksHTML(c)}
-      ${assumptions.length?`<div class="assume-box"><b>Assumptions in play — edit in “What if…?”</b><ul>${assumptions.map(t=>`<li>${t}</li>`).join("")}</ul></div>`:""}
+
     </div>`;
 }
 function giveFb(k,v){S.feedback[k]=S.feedback[k]===v?undefined:v;
@@ -1015,45 +1024,6 @@ async function slmChat(sys,user,maxNew){
   if(Array.isArray(t)){const last=t[t.length-1];t=last&&last.content}
   return String(t||"");
 }
-const WISH_INTS=["beach","nature","culture","food","adventure","nightlife","calm","family"];
-function validateWish(j){const out={};
-  if(j&&typeof j.origin==="string"&&j.origin.trim())out.origin=j.origin.trim().slice(0,80);
-  if(j&&j.month==="flex")out.month="flex";else if(j){const m=+j.month;if(m>=1&&m<=12)out.month=m-1}
-  if(j){const d=+j.days;if(d>=2&&d<=30)out.days=Math.round(d)}
-  if(j&&["solo","couple","family","friends","multigen"].includes(j.party))out.party=j.party;
-  if(j&&Array.isArray(j.interests)){const xs=[...new Set(j.interests.filter(x=>WISH_INTS.includes(x)))];if(xs.length)out.interests=xs}
-  if(j)for(const k of["pace","comfort","price","adventure"]){const v=+j[k];
-    if(!Number.isNaN(v)&&v>=0&&v<=100){(out.sliders=out.sliders||{})[k]=Math.round(v)}}
-  return out;
-}
-async function parseWish(text){
-  const sys="You convert a travel wish into strict JSON. Output ONLY the JSON object — no prose, no markdown.";
-  const user=`Wish: """${text}"""
-Fill this schema; null for anything not stated. month = 1-12 or "flex". Hindi/Hinglish understood.
-{"origin":null,"month":null,"days":null,"party":null,"interests":[],"pace":null,"comfort":null,"price":null,"adventure":null}
-party ∈ solo|couple|family|friends|multigen · interests ⊆ ${WISH_INTS.join("|")} · pace/comfort/price/adventure 0-100 (price = how price-sensitive).`;
-  return validateWish(extractJSON(await slmChat(sys,user,180)));
-}
-async function applyWish(){
-  const t=($("wishIn")&&$("wishIn").value||"").trim();if(!t)return;
-  const st=$("wishStatus");st.textContent="Understanding…";
-  try{
-    const w=await parseWish(t),got=[];
-    if(w.month!=null){S.a.month=w.month;S.skipped.delete("month");got.push(w.month==="flex"?"flexible dates":MONTHS[w.month])}
-    if(w.days){S.a.days=w.days;S.skipped.delete("days");got.push(w.days+" days")}
-    if(w.party){S.a.party=w.party;S.skipped.delete("party");got.push(w.party)}
-    if(w.interests){S.a.interests=w.interests;S.skipped.delete("interests");got.push(w.interests.join("+"))}
-    if(w.sliders){Object.assign(S.a.sliders,w.sliders);S.skipped.delete("sliders");got.push("style")}
-    if(w.origin){st.textContent=`Locating “${w.origin}”…`;
-      try{const hit=(await geocode(w.origin))[0];
-        if(hit){S.a.origin=hit;S.skipped.delete("origin");got.push("from "+hit.name)}}catch(e){}}
-    st.innerHTML=got.length
-      ?`Understood: <b>${esc(got.join(" · "))}</b> <span class="tag ai">ON-DEVICE AI</span>${S.a.origin?"":" — just add where you're starting from below."}`
-      :"Couldn't pull details from that — the questions below work as always.";
-    const run=$("wishRun");if(run)run.style.display=S.a.origin?"inline-flex":"none";
-    renderStep();
-  }catch(e){st.textContent="The on-device model stumbled on that one — the questions below still work."}
-}
 const NOM_THEMES={hills:{be:1,na:9,cu:4,fo:6,ad:6,ni:2,fa:7,ca:9},beach:{be:9,na:6,cu:4,fo:6,ad:5,ni:5,fa:7,ca:8},
   heritage:{be:1,na:4,cu:9,fo:6,ad:4,ni:3,fa:6,ca:6},wildlife:{be:1,na:9,cu:3,fo:4,ad:8,ni:1,fa:7,ca:7},
   city:{be:2,na:3,cu:7,fo:8,ad:3,ni:7,fa:6,ca:4},lake:{be:3,na:8,cu:4,fo:5,ad:5,ni:2,fa:7,ca:9}};
@@ -1084,39 +1054,17 @@ async function slmNominate(){
 }
 function renderMagic(){
   const el=$("magicCard");if(!el)return;
-  if(SLM.status==="idle")el.innerHTML=`<div class="magic"><h4>✨ ONE-LINE PLANNING · OPTIONAL</h4>
-    <p style="font-size:13.5px;margin-bottom:10px">Describe your trip in one line — any language — and skip the questions. Runs a small AI <b>entirely on your device</b>: one download (~0.4 GB, cached), nothing you type leaves your phone.</p>
-    <button class="btn btn-primary" onclick="loadSLM()">Enable on-device AI</button>
+  if(SLM.status==="idle")el.innerHTML=`<div class="magic"><h4>✨ ON-DEVICE AI SCOUT · OPTIONAL</h4>
+    <p style="font-size:13.5px;margin-bottom:10px">Helps you <b>discover more places</b> — the local favorites that open datasets miss — and every suggestion is checked against the real map before it can appear. One download (~0.4 GB, cached), then it runs entirely in your browser.</p>
+    <button class="btn btn-primary" onclick="loadSLM()">Enable AI scout</button>
     <button class="btn-ghost" style="color:#9FB6B0" onclick="this.closest('.magic').style.display='none'">No thanks</button></div>`;
   else if(SLM.status==="loading")el.innerHTML=`<div class="magic"><h4>✨ DOWNLOADING MODEL — ONCE, THEN CACHED</h4><div class="prog"><i></i></div>
     <p class="est-note" style="margin-top:8px">Qwen2.5-0.5B via Transformers.js · keep answering below meanwhile.</p></div>`;
-  else if(SLM.status==="ready")el.innerHTML=`<div class="magic"><h4>✨ ONE-LINE PLANNING · ON-DEVICE</h4>
-    <textarea id="wishIn" placeholder='e.g. "romantic 5 days somewhere cool in September, no long flights" · "family ke saath 4 din, pahado mein, budget tight"'></textarea>
-    <div style="display:flex;gap:10px;margin-top:10px;flex-wrap:wrap">
-      <button class="btn btn-primary" onclick="applyWish()">Understand my trip</button>
-      <button class="btn btn-primary" id="wishRun" style="display:none" onclick="runPipeline()">Run the pipeline →</button></div>
-    <p class="est-note" id="wishStatus" style="margin-top:8px">Private by construction — inference happens in your browser.</p></div>`;
+  else if(SLM.status==="ready")el.innerHTML=`<div class="magic"><h4>✨ AI SCOUT READY</h4>
+    <p class="est-note">Ready to help you discover more places, each one verified on the map. It runs on your device — nothing you enter is shared with us or anyone else.</p></div>`;
   else el.innerHTML=`<div class="magic"><h4>✨ ON-DEVICE AI</h4><p class="est-note">${esc(SLM.note)}</p></div>`;
 }
 
-/* grounded verdict rewrite — uses ONLY facts we hand it; template shows instantly, AI swaps in */
-const SLM_VERDICT={};
-async function maybeAIVerdict(r){
-  if(SLM.status!=="ready"||!r)return;
-  const key=ckey(r.c)+"|"+r.m+"|"+(S.a.days||6)+"|"+r.total;
-  let t=SLM_VERDICT[key];
-  if(!t){
-    const c=r.c,cl=r.cl;
-    const facts=[`destination: ${c.n}, ${c.co}`,`fit score ${r.total}/100 for this traveler`,
-      `month: ${MONTHS[r.m]}`,cl?`weather last ${MONTHS[r.m]}: ~${cl.tmax}°C, ${cl.wetDays} wet days`:null,
-      `journey: ${r.sel.label.toLowerCase()}, ~${fmtH(r.sel.h)} one-way`,
-      `${S.a.days||6} days planned; the place deserves ${c.d}+`].filter(Boolean).join("; ");
-    try{t=(await slmChat("You write one short, warm verdict for a travel advisor. Use ONLY the given facts — no new claims, no invented numbers. Exactly two sentences, plain text.","Facts: "+facts,90)).replace(/\s+/g," ").trim();
-      if(t.length<40||t.length>400)t=null;else SLM_VERDICT[key]=t;
-    }catch(e){t=null}}
-  const el=$("verdictTxt");
-  if(t&&el&&S.sel===ckey(r.c))el.innerHTML=esc(t)+' <span class="tag ai">ON-DEVICE AI</span>';
-}
 
 function shareLink(){
   try{const p=btoa(unescape(encodeURIComponent(JSON.stringify({a:S.a}))));
